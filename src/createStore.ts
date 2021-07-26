@@ -78,7 +78,7 @@ export default function createStore<
         'together to a single function. See https://redux.js.org/tutorials/fundamentals/part-4-store#creating-a-store-with-enhancers for an example.'
     )
   }
-
+  // 如果没有传入参数enhancer，并且preloadedState的值又是一个函数的话，createStore会认为省略了preloadedState，因此第二个参数就是enhancer
   if (typeof preloadedState === 'function' && typeof enhancer === 'undefined') {
     enhancer = preloadedState as StoreEnhancer<Ext, StateExt>
     preloadedState = undefined
@@ -107,11 +107,11 @@ export default function createStore<
     )
   }
 
-  let currentReducer = reducer
-  let currentState = preloadedState as S
-  let currentListeners: (() => void)[] | null = []
-  let nextListeners = currentListeners
-  let isDispatching = false
+  let currentReducer = reducer  // 初始reducer
+  let currentState = preloadedState as S  // 初始state
+  let currentListeners: (() => void)[] | null = []  // 所有的事件监听
+  let nextListeners = currentListeners  //  当前监听器的一个副本(相同的引用)
+  let isDispatching = false  // 是否正在派发
 
   /**
    * This makes a shallow copy of currentListeners so we can use
@@ -120,7 +120,10 @@ export default function createStore<
    * This prevents any bugs around consumers calling
    * subscribe/unsubscribe in the middle of a dispatch.
    */
+  // 做了一份浅拷贝 可以使用 nextListeners 作为调度时的临时列表
+  //
   function ensureCanMutateNextListeners() {
+    // 如果nextListeners和currentListeners具有相同的引用，则获取一份当前事件监听器集合的一个副本保存到nextListeners中
     if (nextListeners === currentListeners) {
       nextListeners = currentListeners.slice()
     }
@@ -131,6 +134,7 @@ export default function createStore<
    *
    * @returns The current state tree of your application.
    */
+  // 返回当前store的state
   function getState(): S {
     if (isDispatching) {
       throw new Error(
@@ -166,6 +170,7 @@ export default function createStore<
    * @param listener A callback to be invoked on every dispatch.
    * @returns A function to remove this change listener.
    */
+  // 订阅 事件(订阅store变化)
   function subscribe(listener: () => void) {
     if (typeof listener !== 'function') {
       throw new Error(
@@ -183,12 +188,13 @@ export default function createStore<
           'See https://redux.js.org/api/store#subscribelistener for more details.'
       )
     }
-
+    // 事件是否已被订阅标志 (加锁) isSubscribed是以闭包的形式判断当前监听者函数是否在监听，从而保证只有第一次调用unsubscribe才是有效的 防止多次取消订阅报错
     let isSubscribed = true
-
+    // 生成一份当前事件监听器的一个副本保存到nextListeners中
     ensureCanMutateNextListeners()
+    // // 将新的事件监听器添加到nextListeners中
     nextListeners.push(listener)
-
+    // 返回一个取消监听的函数
     return function unsubscribe() {
       if (!isSubscribed) {
         return
@@ -200,11 +206,13 @@ export default function createStore<
             'See https://redux.js.org/api/store#subscribelistener for more details.'
         )
       }
-
+      // 取消监听后重置状态
       isSubscribed = false
 
       ensureCanMutateNextListeners()
+      // 获取取消监听的listener索引
       const index = nextListeners.indexOf(listener)
+      // 从保存的事件监听器中移除 被取消的listener
       nextListeners.splice(index, 1)
       currentListeners = null
     }
@@ -236,6 +244,7 @@ export default function createStore<
    * return something else (for example, a Promise you can await).
    */
   function dispatch(action: A) {
+    // 保证被派发的action是一个纯粹的对象
     if (!isPlainObject(action)) {
       throw new Error(
         `Actions must be plain objects. Instead, the actual type was: '${kindOf(
@@ -243,30 +252,34 @@ export default function createStore<
         )}'. You may need to add middleware to your store setup to handle dispatching other values, such as 'redux-thunk' to handle dispatching functions. See https://redux.js.org/tutorials/fundamentals/part-4-store#middleware and https://redux.js.org/tutorials/fundamentals/part-6-async-logic#using-the-redux-thunk-middleware for examples.`
       )
     }
-
+    // 确保action 必须有一个type属性
     if (typeof action.type === 'undefined') {
       throw new Error(
         'Actions may not have an undefined "type" property. You may have misspelled an action type string constant.'
       )
     }
-
+    // TODO:如果redux正在派发action，则抛出异常？
+    // 防止在reducer中做dispatch操作，如果在reducer中做了dispatch,而dispatch又必然会导致reducer的调用，就会造成死循环
     if (isDispatching) {
       throw new Error('Reducers may not dispatch actions.')
     }
 
     try {
       isDispatching = true
+      // 通过当前的reducer和state 计算出新的estate
       currentState = currentReducer(currentState, action)
     } finally {
       isDispatching = false
     }
-
+    // nextListeners: 保存这次dispatch后，需要触发的所有事件监听器的列表
+    // currentListeners: 保存一份nextListeners列表的副本
+    //  listeners: 需要执行的列表
     const listeners = (currentListeners = nextListeners)
     for (let i = 0; i < listeners.length; i++) {
       const listener = listeners[i]
       listener()
     }
-
+    // 中间件机制
     return action
   }
 
@@ -280,6 +293,7 @@ export default function createStore<
    * @param nextReducer The reducer for the store to use instead.
    * @returns The same store instance with a new reducer in place.
    */
+  // 提换reducer的方法。(动态加载reducers的时候才用) /热加载
   function replaceReducer<NewState, NewActions extends A>(
     nextReducer: Reducer<NewState, NewActions>
   ): Store<ExtendState<NewState, StateExt>, NewActions, StateExt, Ext> & Ext {
@@ -298,6 +312,7 @@ export default function createStore<
     // Any reducers that existed in both the new and old rootReducer
     // will receive the previous state. This effectively populates
     // the new state tree with any relevant data from the old one.
+    // 替换结束 重新初始化
     dispatch({ type: ActionTypes.REPLACE } as A)
     // change the type of the store by casting it to the new store
     return store as unknown as Store<
@@ -315,6 +330,7 @@ export default function createStore<
    * For more information, see the observable proposal:
    * https://github.com/tc39/proposal-observable
    */
+  // 配合 RxJS和响应式库使用
   function observable() {
     const outerSubscribe = subscribe
     return {
@@ -356,6 +372,7 @@ export default function createStore<
   // When a store is created, an "INIT" action is dispatched so that every
   // reducer returns their initial state. This effectively populates
   // the initial state tree.
+  // 自动派发一次 初始化 state
   dispatch({ type: ActionTypes.INIT } as A)
 
   const store = {
@@ -367,3 +384,21 @@ export default function createStore<
   } as unknown as Store<ExtendState<S, StateExt>, A, StateExt, Ext> & Ext
   return store
 }
+
+
+
+// 维护2份listeners
+// 监听器在什么时候会执行？ 再调用dispatch 派发action之后
+// listeners = (currentListeners = nextListeners) 三个变量引用内存中的同一份数组，只要其中一个发生变化，另外两个立马改变
+// 如果我在某个事件监听器函数中调用了取消了某个监听器，那么在这次dispatch后，被取消的这个事件监听器 还会不会执行？
+// 即使你在某个事件监听器中，取消了其它的事件监听器，那么被取消的这个事件监听器，在这次dispatch后仍然会执行。也就是说。redux会保证在某个dispatch后，会保证在这个dispatch之前的所有事件监听器全部执行
+
+// https://segmentfault.com/a/1190000011835213
+
+
+
+
+// 在任何时间点添加listener。无论是dispatch action时，还是state值正在发生改变的时候
+// 注意的，在每一次调用dispatch之前，订阅者仅仅只是一份快照(snapshot),如果是在listeners被调用期间发生订阅(subscribe)或者解除订阅(unsubscribe),在本次通知中并不会立即生效，而是在下次中生效
+// 因此添加的过程是在nextListeners中添加的订阅者，而不是直接添加到currentListeners。然后在每一次调用dispatch的时候都会做
+// const listeners = currentListeners = nextListeners  来同步currentListeners和nextListeners

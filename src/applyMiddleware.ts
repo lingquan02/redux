@@ -86,3 +86,5 @@ export default function applyMiddleware(
       }
     }
 }
+
+// https://github.com/MrErHu/blog/issues/7

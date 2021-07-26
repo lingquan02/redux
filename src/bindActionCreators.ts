@@ -55,10 +55,15 @@ export default function bindActionCreators<
   N extends ActionCreatorsMapObject
 >(actionCreators: M, dispatch: Dispatch): N
 
+// 把actionCreator 和 dispatch 进行绑定
+// function createAdd() {
+//   return dispatch({type:'ADD'})
+// }
 export default function bindActionCreators(
   actionCreators: ActionCreator<any> | ActionCreatorsMapObject,
   dispatch: Dispatch
 ) {
+  // 对于单个 actionCreator  直接调用用bindActionCreator
   if (typeof actionCreators === 'function') {
     return bindActionCreator(actionCreators, dispatch)
   }
@@ -73,6 +78,8 @@ export default function bindActionCreators(
   }
 
   const boundActionCreators: ActionCreatorsMapObject = {}
+  // 如果传递的是一个 actionCreator 的map {counterA:function(){}, counterB: function(){}}
+  // 则遍历 对象 对每一个actionCreator 都执行bindActionCreator
   for (const key in actionCreators) {
     const actionCreator = actionCreators[key]
     if (typeof actionCreator === 'function') {

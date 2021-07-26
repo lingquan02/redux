@@ -122,6 +122,7 @@ export default function combineReducers<M extends ReducersMapObject>(
   CombinedState<StateFromReducersMapObject<M>>,
   ActionFromReducersMapObject<M>
 >
+// 合并reducer
 export default function combineReducers(reducers: ReducersMapObject) {
   const reducerKeys = Object.keys(reducers)
   const finalReducers: ReducersMapObject = {}
@@ -149,6 +150,8 @@ export default function combineReducers(reducers: ReducersMapObject) {
 
   let shapeAssertionError: Error
   try {
+    // 判断reducers中的每一个reducer在action为{ type: ActionTypes.INIT }时是否有初始值，如果没有则会抛出异常
+    // 并且会对reducer执行一次随机的action,如果没有返回，则抛出错误，告知你不要处理redux中的私有的action,对于未知的action应当返回当前的state。并且初始值不能为undefined但是可以是null。
     assertReducerShape(finalReducers)
   } catch (e) {
     shapeAssertionError = e
@@ -161,7 +164,9 @@ export default function combineReducers(reducers: ReducersMapObject) {
     if (shapeAssertionError) {
       throw shapeAssertionError
     }
-
+    // 1.reducer中是不是存在reducer
+    // 2.state是否是纯Object对象
+    // 3.state中存在reducer没有处理的项，但是仅会在第一次提醒，之后就忽略了
     if (process.env.NODE_ENV !== 'production') {
       const warningMessage = getUnexpectedStateShapeWarningMessage(
         state,
@@ -173,9 +178,11 @@ export default function combineReducers(reducers: ReducersMapObject) {
         warning(warningMessage)
       }
     }
-
+    // 记录前后state是否发生改变
     let hasChanged = false
+    // 记录本次执行reducer返回的state
     const nextState: StateFromReducersMapObject<typeof reducers> = {}
+    // 循环遍历reducers，将对应的store的部分交给相关的reducer处理，当然对应各个reducer返回的新的state仍然不可以是undefined
     for (let i = 0; i < finalReducerKeys.length; i++) {
       const key = finalReducerKeys[i]
       const reducer = finalReducers[key]
@@ -194,6 +201,7 @@ export default function combineReducers(reducers: ReducersMapObject) {
       nextState[key] = nextStateForKey
       hasChanged = hasChanged || nextStateForKey !== previousStateForKey
     }
+    // hasChanged是否改变来决定返回nextState还是state,这样就保证了在不变的情况下仍然返回的是同一个对象
     hasChanged =
       hasChanged || finalReducerKeys.length !== Object.keys(state).length
     return hasChanged ? nextState : state
